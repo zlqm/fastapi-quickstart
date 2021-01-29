@@ -12,25 +12,23 @@ reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=CONFIG.JWT_TOKEN_URL)
 
 
 async def get_current_user(
-    db: Database = Depends(get_db),
-    token: str = Depends(reusable_oauth2),
+        db: Database = Depends(get_db),
+        token: str = Depends(reusable_oauth2),
 ) -> schemas.UserInDB:
     try:
-        payload = jwt.decode(
-            token, CONFIG.JWT_SECRET_KEY, algorithms=[CONFIG.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token,
+                             CONFIG.JWT_SECRET_KEY,
+                             algorithms=[CONFIG.JWT_ALGORITHM])
         token_data = schemas.TokenPayload(**payload)
-    except (jwt.JWTError, ValidationError) as err:
-        print(err)
+    except (jwt.JWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
     user = await crud.user.get(db, id=token_data.sub)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="User not found")
     return user
 
 
@@ -38,9 +36,8 @@ async def get_current_active_user(
     current_user: schemas.UserInDB = Depends(get_current_user),
 ) -> schemas.UserInDB:
     if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Inactive user")
     return current_user
 
 

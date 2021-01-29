@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 
 from databases import Database
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,38 +14,42 @@ router = APIRouter()
 async def read_user_me(
     *,
     db: Database = Depends(get_db),
-    current_active_user: schemas.UserInDB = Depends(deps.get_current_active_user)
+    current_active_user: schemas.UserInDB = Depends(
+        deps.get_current_active_user)
 ) -> schemas.User:
     return current_active_user
 
 
-@router.post("/me")
+@router.put("/me")
 async def update_user_me(
     user_in: schemas.UserUpdate,
-    db: Database = Depends(schemas.User),
+    db: Database = Depends(get_db),
     current_user: schemas.UserInDB = Depends(deps.get_current_active_user),
 ) -> Any:
     user = await crud.user.update(db, db_obj=current_user, obj_in=user_in)
     return user
 
 
-@router.get("/", response_model=schemas.User)
+@router.get("/")
 async def read_users(
     *,
     db: Database = Depends(get_db),
     offset: int = 0,
     limit: int = 100,
     current_user: schemas.UserInDB = Depends(deps.get_current_active_superuser)
-) -> List[schemas.User]:
+) -> Any:
     users = await crud.user.get_multi(db, offset=offset, limit=limit)
-    return users
+    users = [schemas.User(**user.dict()) for user in users]
+    total = await crud.user.count(db)
+    return {'total': total, 'items': users}
 
 
 @router.post("/", response_model=schemas.User)
 async def create_user(
     user_in: schemas.UserCreate,
     db: Database = Depends(get_db),
-    current_user: schemas.UserInDB = Depends(deps.get_current_active_superuser),
+    current_user: schemas.UserInDB = Depends(
+        deps.get_current_active_superuser),
 ) -> Any:
     user = await crud.user.get_by_email(db, user_in.email)
     if user:
@@ -53,5 +57,5 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this username already exists in the system",
         )
-    user = crud.user.create(db, obj_in=user_in)
+    user = await crud.user.create(db, obj_in=user_in)
     return user

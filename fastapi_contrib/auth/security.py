@@ -14,11 +14,11 @@ def get_password_hash(password) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    print(f"{plain_password=} {hashed_password=}")
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: Union[str, Any], expires_delta: timedelta) -> str:
+def create_access_token(subject: Union[str, Any],
+                        expires_delta: timedelta) -> str:
     expires_delta = expires_delta
     expire_at = datetime.utcnow() + expires_delta
     to_encode = {"exp": expire_at, "sub": str(subject)}

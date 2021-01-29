@@ -15,27 +15,39 @@ class CRUDBase:
         self.table = table
         self.model = model
 
-    async def get(self, db: Database, id: Any) -> Optional[Dict[str, Any]]:
-        query = self.table.select().where(self.table.c.id == id)
+    def _filter_by(self, _query=None, **kwargs):
+        query = _query
+        if query is None:
+            query = self.table.select()
+        for key, value in kwargs.items():
+            query = query.where(getattr(self.table.c, key) == value)
+        return query
+
+    async def count(self, db: Database, **kwargs) -> int:
+        query = self._filter_by(**kwargs).count()
+        return await db.fetch_val(query=query)
+
+    async def get(self, db: Database, **kwargs) -> Optional[Dict[str, Any]]:
+        query = self._filter_by(**kwargs)
         record = await db.fetch_one(query=query)
         if record:
             record = self.model(**record)
         return record
 
-    async def get_multi(
-        self, db: Database, *, offset: int = 0, limit: int = 100
-    ) -> List[ModelType]:
-        query = self.table.select().offset(offset).limit(limit)
+    async def get_multi(self,
+                        db: Database,
+                        *,
+                        offset: int = 0,
+                        limit: int = 100,
+                        **kwargs) -> List[ModelType]:
+        query = self._filter_by(**kwargs)
+        query = query.offset(offset).limit(limit)
         items = await db.fetch_all(query)
         return [self.model(**item) for item in items]
 
     async def create(
-        self,
-        db: Database,
-        *,
-        db_obj: ModelType,
-        obj_in: Union[UpdateSchemaType, Dict[str, Any]]
-    ) -> ModelType:
+            self, db: Database, *, db_obj: ModelType,
+            obj_in: Union[UpdateSchemaType, Dict[str, Any]]) -> ModelType:
         obj_in_data = jsonable_encoder(obj_in)
         ins = self.table.insert().values(**obj_in_data)
         last_record_id = await db.execute(ins)
@@ -43,23 +55,20 @@ class CRUDBase:
         return self.model(**obj_in_data)
 
     async def update(
-        self,
-        db: Database,
-        *,
-        db_obj: ModelType,
-        obj_in: Union[UpdateSchemaType, Dict[str, Any]]
-    ) -> ModelType:
+            self, db: Database, *, db_obj: ModelType,
+            obj_in: Union[UpdateSchemaType, Dict[str, Any]]) -> ModelType:
         if isinstance(obj_in, dict):
             update_data = obj_in
         else:
             update_data = obj_in.dict(exclude_unset=True)
-        "id" in update_data and update_data.pop("id")
-        for field in db_obj:
-            if field not in update_data:
+        for field, _ in db_obj:
+            if field not in update_data and field in update_data:
                 update_data.pop(field)
+        if 'id' in update_data:
+            update_data.pop('id')
         if not update_data:
             return db_obj
-        query = update(self.table).where(self.table.id == db_obj.id)
+        query = update(self.table).where(self.table.c.id == db_obj.id)
         query = query.values(**update_data)
         await db.execute(query)
         return await self.get(db, db_obj.id)
